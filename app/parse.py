@@ -124,7 +124,7 @@ def write_quotes_to_csv(quotes: list[Quote], path: str) -> None:
     with open(path, "w", newline="", encoding="utf-8") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(QUOTE_FIELDS)
-        # далі rows записується у вигляді списку за вимогами завдання і тестів
+        # далі tags записується у вигляді списку за вимогами завдання і тестів
         writer.writerows(astuple(quote) for quote in quotes)
 
 
