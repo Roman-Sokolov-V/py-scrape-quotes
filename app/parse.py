@@ -30,20 +30,7 @@ class Quote:
 
 QUOTE_FIELDS = [field.name for field in fields(Quote)]
 
-
-def get_biographies_from_csv(path: str) -> dict:
-    bio = dict()
-    try:
-        with open(path) as csvfile:
-            reader = csv.DictReader(csvfile)
-            for row in reader:
-                bio[row["author"]] = row["born"], row["description"]
-    except FileNotFoundError:
-        logging.error("File not found")
-    return bio
-
-
-biographies = get_biographies_from_csv("biographies.csv")
+biographies = dict()
 
 
 def get_soup(url: str) -> BeautifulSoup:
@@ -76,11 +63,14 @@ def get_soup(url: str) -> BeautifulSoup:
                 raise
 
 
-def add_biography(url: str, author: str) -> dict:
+def add_biography(url: str, author: str) -> None:
     soup = get_soup(url)
-    born = soup.select_one(".author-born-date").text
-    description = soup.select_one(".author-description").text
-    biographies[author] = born, description
+    born = soup.select_one(".author-born-date")
+    born = born.text if born else None
+    description = soup.select_one(".author-description")
+    description = description.text if description else None
+    if born or description:
+        biographies[author] = born, description
 
 
 def get_from_page(url: str) -> tuple[list[Quote], str | None]:
@@ -89,18 +79,25 @@ def get_from_page(url: str) -> tuple[list[Quote], str | None]:
     quotes = []
 
     for quote in raw_quotes:
-        text = quote.select_one(".text").text
-        author = quote.select_one(".author").text
+        text = quote.select_one(".text")
+        text = text.text if text else None
+        author = quote.select_one(".author")
+        author = author.text if author else None
         tags = [tag.text for tag in quote.select(".tag")]
-        quotes.append(Quote(text=text, author=author, tags=tags))
+        if author and text:
+            quotes.append(Quote(text=text, author=author, tags=tags))
 
-        if author not in biographies.keys():
-            logging.info(f"Adding {author} to biography")
-            href = quote.select_one("a")["href"]
-            logging.info(f"href {href}")
-            bio_url = urljoin(url, href)
-            logging.info(f"bio url {bio_url} to biography")
-            add_biography(bio_url, author)
+        if author and author not in biographies.keys():
+            logging.info(f"Try to get {author} biography")
+            link_tag = quote.select_one("a")
+            href = link_tag.get("href") if link_tag else None
+            if href is not None:
+                bio_url = urljoin(url, href)
+                logging.info(f"bio url {bio_url} to biography")
+                add_biography(bio_url, author)
+                logging.info(f"{author} biography added to cash")
+            else:
+                logging.info(f"no link for {author} to biography page")
 
     element_next = soup.select_one(".next a")
     if element_next:
@@ -124,16 +121,16 @@ def get_all_data(url: str) -> list[Quote]:
 
 def write_quotes_to_csv(quotes: list[Quote], path: str) -> None:
     logging.info("Writing quotes to csv")
-    with open(f"{path}", "w", newline="", encoding="utf-8") as csvfile:
+    with open(path, "w", newline="", encoding="utf-8") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(QUOTE_FIELDS)
         # далі rows записується у вигляді списку за вимогами завдання і тестів
         writer.writerows(astuple(quote) for quote in quotes)
 
 
-def write_biographies_to_csv(bio: dict) -> None:
-    logging.info("Writing biographies to csv")
-    with open("biographies.csv", "w", newline="", encoding="utf-8") as csvfile:
+def write_biographies_to_csv(bio: dict, path: str) -> None:
+    logging.info(f"Writing biographies to {path}")
+    with open(path, "w", newline="", encoding="utf-8") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(("author", "born", "description"))
         for author, data in bio.items():
@@ -142,7 +139,7 @@ def write_biographies_to_csv(bio: dict) -> None:
 
 def main(output_csv_path: str) -> None:
     write_quotes_to_csv(get_all_data(BASE_URL), output_csv_path)
-    write_biographies_to_csv(biographies)
+    write_biographies_to_csv(biographies, "bio.csv")
 
 
 if __name__ == "__main__":
